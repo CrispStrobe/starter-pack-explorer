@@ -125,6 +125,8 @@ next-env.d.ts
 # Custom Additions (Optional)
 # ================================
 
+/my-next-shadcn-app/
+
 # Ignore any other OS-specific files
 *.bak
 *.swp
