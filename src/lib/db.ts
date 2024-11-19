@@ -2,6 +2,13 @@
 
 import { MongoClient } from 'mongodb';
 
+
+// Extend the global interface to include _mongoClientPromise
+declare global {
+  // eslint-disable-next-line no-var
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
+}
+
 const uri = process.env.MONGODB_URI;
 
 let clientPromise: Promise<MongoClient>;
@@ -15,12 +22,6 @@ if (!uri) {
   clientPromise = Promise.resolve(null as unknown as MongoClient);
 } else {
   const options = {};
-
-  // Extend the global interface to include _mongoClientPromise
-  declare global {
-    // eslint-disable-next-line no-var
-    var _mongoClientPromise: Promise<MongoClient> | undefined;
-  }
 
   let client: MongoClient;
 
