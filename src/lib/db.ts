@@ -10,6 +10,7 @@ declare global {
 }
 
 const uri = process.env.MONGODB_URI;
+console.log('MONGODB_URI is', uri ? 'defined' : 'undefined');
 
 let clientPromise: Promise<MongoClient>;
 
