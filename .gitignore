@@ -1,7 +1,11 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ================================
+# Node.js Dependencies
+# ================================
 
-# dependencies
-/node_modules
+# Exclude node_modules directory
+/node_modules/
+
+# Yarn Plug'n'Play
 /.pnp
 .pnp.*
 .yarn/*
@@ -10,31 +14,130 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# ================================
+# Build Outputs
+# ================================
 
-# next.js
+# Next.js build directory
 /.next/
+
+# Output directory for `next export`
 /out/
 
-# production
-/build
+# Custom build directory (if applicable)
+/build/
 
-# misc
-.DS_Store
-*.pem
+# ================================
+# Testing
+# ================================
 
-# debug
+# Coverage reports
+/coverage/
+
+# ================================
+# Environment Variables
+# ================================
+
+# Environment variable files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Prevent committing example environment files (optional)
+!.env.example
+
+# ================================
+# Logs
+# ================================
+
+# Log files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# ================================
+# Operating System Files
+# ================================
 
-# vercel
-.vercel
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
 
-# typescript
+# Windows
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# ================================
+# IDEs and Editors
+# ================================
+
+# Visual Studio Code
+.vscode/
+# JetBrains IDEs (e.g., WebStorm, IntelliJ)
+.idea/
+# Other IDEs and editors
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~
+
+# ================================
+# TypeScript
+# ================================
+
+# TypeScript build info
 *.tsbuildinfo
+
+# Next.js TypeScript definitions
 next-env.d.ts
+
+# ================================
+# Vercel
+# ================================
+
+# Vercel configuration and deployment files
+.vercel/
+
+# ================================
+# Miscellaneous
+# ================================
+
+# Private keys and certificates
+*.pem
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Lock files (optional: if you prefer one lock file, choose npm or yarn)
+/package-lock.json
+/yarn.lock
+
+# ================================
+# Custom Additions (Optional)
+# ================================
+
+# Ignore any other OS-specific files
+*.bak
+*.swp
+
+# Ignore build logs
+/build-log.txt
+
+# Ignore coverage reports
+/coverage/
+
+# Ignore test reports
+/jest-report.html
+
+# ================================
+# End of .gitignore
+# ================================
