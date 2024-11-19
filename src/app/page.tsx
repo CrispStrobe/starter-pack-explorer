@@ -313,7 +313,7 @@ export default function Home() {
           </div>
         ) : searchQuery ? (
           <div className="text-center py-8 text-gray-600">
-            No results found for "{searchQuery}"
+            No results found for &quot;{searchQuery}&quot;
           </div>
         ) : null}
       </div>
