@@ -2,7 +2,7 @@
 
 Starter Pack Explorer is a web application that allows users to search and explore Bluesky starter packs and their members. It provides an interface to search for starter packs or users, view pack details, and see pack members.
 
-Currently it is a. Demo currently running [on vercel](https://starter-pack-explorer-o13o.vercel.app/).
+Currently it is a simple prototype. Demo currently running [on vercel](https://starter-pack-explorer-o13o.vercel.app/).
 
 Index is updated from [these scripts](https://github.com/CrispStrobe/bluesky-starterpacks-index).
 
