@@ -24,10 +24,19 @@ export default function Home() {
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortBy, setSortBy] = useState('');
+  const [sortOrder, setSortOrder] = useState('asc');
 
   useEffect(() => {
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      handleSearch(1); // Reset to page 1 when sorting changes
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, sortOrder]);
 
   const fetchStats = async () => {
     try {
@@ -48,7 +57,7 @@ export default function Home() {
     setError(null);
     try {
       const response = await fetch(
-        `/api/search?q=${encodeURIComponent(searchQuery)}&type=${view}&page=${page}`
+        `/api/search?q=${encodeURIComponent(searchQuery)}&type=${view}&page=${page}&sortBy=${sortBy}&sortOrder=${sortOrder}`
       );
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
@@ -91,12 +100,6 @@ export default function Home() {
           <CardHeader className="py-4">
             <CardTitle className="text-xl">{stats.avg_pack_size}</CardTitle>
             <CardDescription>Avg Pack Size</CardDescription>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="py-4">
-            <CardTitle className="text-xl">{stats.active_packs.toLocaleString()}</CardTitle>
-            <CardDescription>Active Packs</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -206,6 +209,9 @@ export default function Home() {
         </div>
       </CardHeader>
       <CardContent>
+        {user.followers_count !== undefined && (
+          <p className="text-gray-600">Followers: {user.followers_count}</p>
+        )}
         {user.packs && user.packs.length > 0 && (
           <div>
             <h4 className="font-semibold mb-2">Member of {user.packs.length} packs:</h4>
@@ -296,6 +302,39 @@ export default function Home() {
             Search
           </button>
 
+        </div>
+        <div className="flex gap-2 items-center mt-4">
+          <label className="mr-2">Sort By:</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {view === 'packs' ? (
+              <>
+                <option value="">Default</option>
+                <option value="name">Pack Name</option>
+                <option value="members">Number of Users</option>
+              </>
+            ) : (
+              <>
+                <option value="">Default</option>
+                <option value="name">User Name</option>
+                <option value="followers">Number of Followers</option>
+                <option value="packs">Number of Starter Packs</option>
+              </>
+            )}
+          </select>
+
+          <label className="ml-4 mr-2">Order:</label>
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+            className="p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
         </div>
       </div>
 

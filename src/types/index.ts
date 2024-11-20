@@ -4,8 +4,10 @@ export interface User {
   did: string;
   handle: string;
   display_name?: string;
-  pack_ids?: string[];
-  packs?: Pack[];
+  followers_count?: number;
+  follows_count?: number;
+  pack_ids_count?: number;
+  packs?: StarterPack[];
 }
 
 export interface Pack {
@@ -19,8 +21,9 @@ export interface StarterPack {
   name: string;
   creator: string;
   description?: string;
-  users: User[];
   user_count: number;
+//  use_count: number;
+  users?: User[];
 }
 
 export interface Stats {

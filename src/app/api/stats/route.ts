@@ -13,8 +13,8 @@ export async function GET() {
     const totalUsers = await db.collection("users").countDocuments();
     
     // Get active packs (packs with users)
-    const activePacks = await db.collection("starter_packs")
-      .countDocuments({ "users": { $exists: true, $not: { $size: 0 } } });
+    //const activePacks = await db.collection("starter_packs")
+    //  .countDocuments({ "users": { $exists: true, $not: { $size: 0 } } });
     
     // Calculate average pack size
     const packSizes = await db.collection("starter_packs")
@@ -37,7 +37,7 @@ export async function GET() {
     return NextResponse.json({
       total_packs: totalPacks,
       total_users: totalUsers,
-      active_packs: activePacks,
+      // active_packs: activePacks,
       avg_pack_size: Math.round(avgPackSize),
       updated_at: new Date().toISOString()
     });
