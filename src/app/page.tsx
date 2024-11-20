@@ -1,20 +1,29 @@
 // src/app/page.tsx
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Search, Users, Package, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import PaginationControls from '@/components/PaginationControls';
 import type { StarterPack, User, Stats } from '@/types';
+
+interface SearchResults {
+  items: StarterPack[] | User[];
+  total: number;
+  page: number;
+  totalPages: number;
+  itemsPerPage: number;
+}
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState<'packs' | 'users'>('packs');
-  const [searchResults, setSearchResults] = useState<StarterPack[] | User[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     fetchStats();
@@ -32,18 +41,19 @@ export default function Home() {
     }
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async (page = 1) => {
     if (!searchQuery.trim()) return;
   
     setLoading(true);
     setError(null);
     try {
-      console.log('Searching for:', searchQuery, 'type:', view);
-      const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}&type=${view}`);
+      const response = await fetch(
+        `/api/search?q=${encodeURIComponent(searchQuery)}&type=${view}&page=${page}`
+      );
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
-      console.log('Search response:', data); // Inspect the data structure here
       setSearchResults(data);
+      setCurrentPage(page);
     } catch (error) {
       console.error('Error searching:', error);
       setError('Search failed. Please try again.');
@@ -51,7 +61,10 @@ export default function Home() {
       setLoading(false);
     }
   };
-  
+
+  const handlePageChange = (newPage: number) => {
+    handleSearch(newPage);
+  };
 
   const togglePackDetails = (packId: string) => {
     setExpandedPack(expandedPack === packId ? null : packId);
@@ -275,13 +288,14 @@ export default function Home() {
             className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
-            onClick={handleSearch}
+            onClick={() => handleSearch()}
             disabled={loading}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 flex items-center gap-2"
           >
             <Search className="h-5 w-5" />
             Search
           </button>
+
         </div>
       </div>
 
@@ -292,31 +306,39 @@ export default function Home() {
       <div>
         {loading ? (
           <div className="text-center py-8 text-gray-600">Loading...</div>
-        ) : searchResults.length > 0 ? (
-          <div className="space-y-4">
+        ) : searchResults?.items.length ? (
+          <>
+            <div className="space-y-4">
+              {view === 'packs'
+                ? (searchResults.items as StarterPack[]).map((pack) => (
+                    pack.rkey ? <PackCard key={pack.rkey} pack={pack} /> : null
+                  ))
+                : (searchResults.items as User[]).map((user) => (
+                    user.did ? <UserCard key={user.did} user={user} /> : null
+                  ))}
+            </div>
             
-            {view === 'packs'
-              ? (searchResults as StarterPack[]).map((pack) => {
-                  if (!pack.rkey) {
-                    console.warn(`Pack missing 'rkey':`, pack);
-                    return null; // Skip rendering this pack
-                  }
-                  return <PackCard key={pack.rkey} pack={pack} />;
-                })
-              : (searchResults as User[]).map((user) => {
-                  if (!user.did) {
-                    console.warn(`User missing 'did':`, user);
-                    return null; // Skip rendering this user
-                  }
-                  return <UserCard key={user.did} user={user} />;
-                })}
-          </div>
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={searchResults.totalPages}
+              onPageChange={handlePageChange}
+              totalItems={searchResults.total}
+              itemsPerPage={searchResults.itemsPerPage}
+            />
+          </>
         ) : searchQuery ? (
           <div className="text-center py-8 text-gray-600">
             No results found for &quot;{searchQuery}&quot;
           </div>
         ) : null}
       </div>
+
+      <footer className="mt-12 pt-8 border-t text-center text-sm text-gray-600">
+        <div className="space-x-4">
+          <a href="/legal" className="hover:text-blue-600">Legal Notice</a>
+          <a href="/privacy" className="hover:text-blue-600">Privacy Policy</a>
+        </div>
+      </footer>
     </div>
   );
 }
