@@ -2,42 +2,39 @@
 
 import { MongoClient } from 'mongodb';
 
-
-// Extend the global interface to include _mongoClientPromise
-declare global {
-  // eslint-disable-next-line no-var
-  var _mongoClientPromise: Promise<MongoClient> | undefined;
+if (!process.env.MONGODB_URI) {
+  throw new Error('Please add your Mongo URI to .env.local');
 }
 
 const uri = process.env.MONGODB_URI;
-console.log('MONGODB_URI is', uri ? 'defined' : 'undefined');
+const options = {
+  maxPoolSize: 10,
+  minPoolSize: 5,
+  maxIdleTimeMS: 60000,
+  retryWrites: true,
+  connectTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+};
+
+declare global {
+  // eslint-disable-next-line no-var
+  var _mongoClientPromise: Promise<MongoClient>;
+}
 
 let clientPromise: Promise<MongoClient>;
 
-if (!uri) {
-  // Throw an error only if not in build process
-  if (process.env.NODE_ENV !== 'production') {
-    throw new Error('Please add your Mongo URI to the environment variables');
+if (process.env.NODE_ENV === 'development') {
+  // In development, use a global variable so that the value
+  // is preserved across module reloads caused by HMR (Hot Module Replacement).
+  if (!global._mongoClientPromise) {
+    const client = new MongoClient(uri, options);
+    global._mongoClientPromise = client.connect();
   }
-  // If in build process, provide a fallback or mock
-  clientPromise = Promise.resolve(null as unknown as MongoClient);
+  clientPromise = global._mongoClientPromise;
 } else {
-  const options = {};
-
-  let client: MongoClient;
-
-  if (process.env.NODE_ENV === 'development') {
-    // In development, use a global variable to prevent multiple connections
-    if (!global._mongoClientPromise) {
-      client = new MongoClient(uri, options);
-      global._mongoClientPromise = client.connect();
-    }
-    clientPromise = global._mongoClientPromise;
-  } else {
-    // In production, create a new client for each connection
-    client = new MongoClient(uri, options);
-    clientPromise = client.connect();
-  }
+  // In production, it's best to not use a global variable.
+  const client = new MongoClient(uri, options);
+  clientPromise = client.connect();
 }
 
 export default clientPromise;

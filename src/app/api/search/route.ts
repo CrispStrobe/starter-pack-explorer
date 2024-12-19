@@ -1,17 +1,18 @@
 // src/app/api/search/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/db';
+import type { Sort } from 'mongodb';
+import type { User, PackBasic } from '@/types';
 
 const ITEMS_PER_PAGE = 10;
 
 export async function GET(request: NextRequest) {
   try {
+    // Parse and validate query parameters
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q');
     const type = searchParams.get('type') || 'packs';
     const page = parseInt(searchParams.get('page') || '1', 10);
-
     const sortBy = searchParams.get('sortBy') || '';
     const sortOrderParam = searchParams.get('sortOrder') || 'asc';
     const sortOrder = sortOrderParam === 'desc' ? -1 : 1;
@@ -29,167 +30,165 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * ITEMS_PER_PAGE;
 
     if (type === 'packs') {
-      // Map sortBy to database fields for packs
-      const sortField = getPackSortField(sortBy);
+      // Search packs - include deleted ones but mark them
+      const baseQuery = {
+        $or: [
+          { name: { $regex: searchRegex } },
+          { creator: { $regex: searchRegex } }
+        ]
+      };
 
-      // Get total count for pagination
       const totalPacks = await db.collection('starter_packs')
-        .countDocuments({
-          $or: [
-            { name: { $regex: searchRegex } },
-            { creator: { $regex: searchRegex } },
-          ],
-        });
+        .countDocuments(baseQuery);
 
-      // Search packs with pagination and sorting   
+      const sortSpec = { [getPackSortField(sortBy)]: sortOrder } as Sort;
+
       const matchingPacks = await db.collection('starter_packs')
-        .find({
-          $or: [
-            { name: { $regex: searchRegex } },
-            { creator: { $regex: searchRegex } },
-          ],
-        })
+        .find(baseQuery)
         .project({
           rkey: 1,
           name: 1,
           creator: 1,
+          creator_did: 1,
           description: 1,
           user_count: 1,
-          //use_count: 1, 
           users: 1,
+          weekly_joins: 1,
+          total_joins: 1,
+          created_at: 1,
+          deleted: 1,
+          status: 1,
+          last_known_state: 1
         })
-        .sort({ [sortField]: sortOrder })
+        .sort(sortSpec)
         .skip(skip)
         .limit(ITEMS_PER_PAGE)
         .toArray();
 
-      const packsWithUsers = await Promise.all(
+      const packsWithDetails = await Promise.all(
         matchingPacks.map(async (pack) => {
-          const packUsersArray: string[] = Array.isArray(pack.users) ? pack.users : [];
+          // Get creator details
+          const creator = await db.collection('users')
+            .findOne(
+              { did: pack.creator_did },
+              {
+                projection: {
+                  did: 1,
+                  handle: 1,
+                  display_name: 1,
+                  followers_count: 1,
+                  deleted: 1
+                }
+              }
+            );
 
-          const packUsers = await db.collection('users')
-            .find({ did: { $in: packUsersArray } })
-            .project({
-              did: 1,
-              handle: 1,
-              display_name: 1,
-            })
-            .toArray();
+          // If pack is deleted, use last known state
+          const packData = pack.deleted ? {
+            ...pack,
+            name: pack.last_known_state?.name || pack.name,
+            creator: pack.last_known_state?.creator || pack.creator
+          } : pack;
 
           return {
-            rkey: pack.rkey,
-            name: pack.name,
-            creator: pack.creator,
-            description: pack.description,
-            user_count: pack.user_count || packUsers.length,
-            //use_count: pack.use_count || 0,
-            users: packUsers,
+            ...packData,
+            creator_details: creator
           };
         })
       );
 
       return NextResponse.json({
-        items: packsWithUsers,
+        items: packsWithDetails,
         total: totalPacks,
         page,
         totalPages: Math.ceil(totalPacks / ITEMS_PER_PAGE),
-        itemsPerPage: ITEMS_PER_PAGE,
+        itemsPerPage: ITEMS_PER_PAGE
       });
+
     } else {
-      // Map sortBy to database fields for users
-      const sortField = getUserSortField(sortBy);
+      // Search users
+      const baseQuery = {
+        $or: [
+          { handle: { $regex: searchRegex } },
+          { display_name: { $regex: searchRegex } }
+        ]
+      };
 
-      // Get total count for pagination
       const totalUsers = await db.collection('users')
-        .countDocuments({
-          $or: [
-            { handle: { $regex: searchRegex } },
-            { display_name: { $regex: searchRegex } },
-          ],
-        });
+        .countDocuments(baseQuery);
 
-      let users;
-      if (sortField === 'pack_ids_count' || sortField === 'followers_count') {
-        // Need to calculate pack_ids_count or ensure followers_count exists
-        users = await db.collection('users')
-          .aggregate([
-            {
-              $match: {
-                $or: [
-                  { handle: { $regex: searchRegex } },
-                  { display_name: { $regex: searchRegex } },
-                ],
-              },
-            },
-            {
-              $addFields: {
-                pack_ids_count: { $size: { $ifNull: ['$pack_ids', []] } },
-                followers_count: { $ifNull: ['$followers_count', 0] },
-              },
-            },
-            {
-              $sort: { [sortField]: sortOrder },
-            },
-            {
-              $skip: skip,
-            },
-            {
-              $limit: ITEMS_PER_PAGE,
-            },
-            {
-              $project: {
-                did: 1,
-                handle: 1,
-                display_name: 1,
-                pack_ids: 1,
-                pack_ids_count: 1,
-                followers_count: 1,
-              },
-            },
-          ])
-          .toArray();
-      } else {
-        users = await db.collection('users')
-          .find({
-            $or: [
-              { handle: { $regex: searchRegex } },
-              { display_name: { $regex: searchRegex } },
-            ],
-          })
-          .sort({ [sortField]: sortOrder })
-          .skip(skip)
-          .limit(ITEMS_PER_PAGE)
-          .project({
-            did: 1,
-            handle: 1,
-            display_name: 1,
-            pack_ids: 1,
-            followers_count: 1,
-          })
-          .toArray();
-      }
+      const sortSpec = { [getUserSortField(sortBy)]: sortOrder } as Sort;
+
+      const users = await db.collection('users')
+        .find(baseQuery)
+        .project({
+          did: 1,
+          handle: 1,
+          display_name: 1,
+          followers_count: 1,
+          follows_count: 1,
+          pack_ids: 1,
+          created_packs: 1,
+          deleted: 1
+        })
+        .sort(sortSpec)
+        .skip(skip)
+        .limit(ITEMS_PER_PAGE)
+        .toArray();
 
       const enhancedUsers = await Promise.all(
         users.map(async (user) => {
-          if (!Array.isArray(user.pack_ids) || user.pack_ids.length === 0) {
-            return {
-              ...user,
-              packs: [],
-            };
-          }
+          // Get all packs where user is a member
+          const memberPacks = user.pack_ids?.length ?
+            await db.collection('starter_packs')
+              .find({ rkey: { $in: user.pack_ids } })
+              .project({
+                rkey: 1,
+                name: 1,
+                creator: 1,
+                creator_did: 1,
+                user_count: 1,
+                deleted: 1,
+                status: 1,
+                last_known_state: 1
+              })
+              .toArray() : [];
 
-          const userPacks = await db.collection('starter_packs')
-            .find({ rkey: { $in: user.pack_ids } })
+          // Get all packs created by user
+          const createdPacks = await db.collection('starter_packs')
+            .find({ creator_did: user.did })
             .project({
               rkey: 1,
               name: 1,
               creator: 1,
+              creator_did: 1,
+              user_count: 1,
+              deleted: 1,
+              status: 1,
+              last_known_state: 1
             })
             .toArray();
 
+          // Transform pack data to include deleted state
+          const transformPacks = (packs: any[]): PackBasic[] => 
+            packs.map(pack => ({
+              rkey: pack.rkey,
+              name: pack.deleted ? pack.last_known_state?.name || pack.name : pack.name,
+              creator: pack.deleted ? pack.last_known_state?.creator || pack.creator : pack.creator,
+              creator_did: pack.creator_did,
+              user_count: pack.user_count,
+              deleted: pack.deleted,
+              status: pack.status
+            }));
+
           return {
-            ...user,
-            packs: userPacks,
+            did: user.did,
+            handle: user.handle,
+            display_name: user.display_name,
+            followers_count: user.followers_count,
+            follows_count: user.follows_count,
+            member_packs: transformPacks(memberPacks),
+            created_packs: transformPacks(createdPacks),
+            deleted: user.deleted
           };
         })
       );
@@ -199,7 +198,7 @@ export async function GET(request: NextRequest) {
         total: totalUsers,
         page,
         totalPages: Math.ceil(totalUsers / ITEMS_PER_PAGE),
-        itemsPerPage: ITEMS_PER_PAGE,
+        itemsPerPage: ITEMS_PER_PAGE
       });
     }
   } catch (error) {
@@ -211,30 +210,30 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper function to map pack sort fields
 function getPackSortField(sortBy: string): string {
   switch (sortBy) {
     case 'name':
       return 'name';
-    //case 'uses':
-    //  return 'use_count'; // Ensure this field exists in your collection
     case 'members':
       return 'user_count';
+    case 'activity':
+      return 'weekly_joins';
+    case 'created':
+      return 'created_at';
     default:
-      return 'name'; // Default sorting
+      return 'name';
   }
 }
 
-// Helper function to map user sort fields
 function getUserSortField(sortBy: string): string {
   switch (sortBy) {
     case 'name':
       return 'display_name';
+    case 'handle':
+      return 'handle';
     case 'followers':
-      return 'followers_count'; // Ensure this field exists in your collection
-    case 'packs':
-      return 'pack_ids_count';
+      return 'followers_count';
     default:
-      return 'display_name'; // Default sorting
+      return 'display_name';
   }
 }
