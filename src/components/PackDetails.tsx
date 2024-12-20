@@ -7,9 +7,10 @@ import type { StarterPack } from '@/types';
 interface PackDetailsProps {
   packId: string;
   onClose?: () => void;
+  onUserClick?: (userId: string) => void;  // Add this prop definition
 }
 
-export function PackDetails({ packId, onClose }: PackDetailsProps) {
+export function PackDetails({ packId, onClose, onUserClick }: PackDetailsProps) {
   const [pack, setPack] = useState<StarterPack | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -196,35 +197,45 @@ export function PackDetails({ packId, onClose }: PackDetailsProps) {
               Members ({pack.users.length.toLocaleString()})
             </h4>
             <div className="grid gap-2">
-              {pack.members.map((member) => (
-                <div
-                  key={member.did}
-                  className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
-                >
-                  <div>
-                    <span className="font-medium">
-                      {member.display_name || member.handle}
-                    </span>
-                    {member.display_name && (
-                      <span className="text-gray-500 ml-2">@{member.handle}</span>
-                    )}
-                    {member.followers_count !== undefined && (
-                      <span className="text-gray-500 ml-2">
-                        · {member.followers_count.toLocaleString()} followers
-                      </span>
-                    )}
-                  </div>
-                  <a
-                    href={`https://bsky.app/profile/${member.handle}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 p-1 rounded-md hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity"
-                    aria-label={`View ${member.display_name || member.handle}'s profile on Bluesky`}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
+              {pack.members && pack.members.length > 0 && (
+              
+                <div className="grid gap-2">
+                  {pack.members.map((member) => (
+                    <div
+                      key={member.did}
+                      className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
+                    >
+                      <button
+                        onClick={() => onUserClick && onUserClick(member.did)}  // Use the prop here
+                        className="flex-1 text-left hover:text-blue-600 transition-colors"
+                      >
+                        <span className="font-medium">
+                          {member.display_name || member.handle}
+                        </span>
+                        {member.display_name && (
+                          <span className="text-gray-500 ml-2">@{member.handle}</span>
+                        )}
+                        {member.followers_count !== undefined && (
+                          <span className="text-gray-500 ml-2">
+                            · {member.followers_count.toLocaleString()} followers
+                          </span>
+                        )}
+                      </button>
+                      <a
+                        href={`https://bsky.app/profile/${member.handle}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 p-1 rounded-md hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`View ${member.display_name || member.handle}'s profile on Bluesky`}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              
+              )}
             </div>
           </div>
         )}

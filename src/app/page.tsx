@@ -1,15 +1,14 @@
 // src/app/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Users, Package } from 'lucide-react';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PackCard } from '@/components/PackCard';
 import { UserCard } from '@/components/UserCard';
 import { PackDetails } from '@/components/PackDetails';
 import { PaginationControls } from '@/components/PaginationControls';
-//import type { StarterPack, User, Stats, PackBasic } from '@/types';
-import { StarterPack, EnhancedUser, Stats } from '@/types';
+import type { StarterPack, EnhancedUser, Stats } from '@/types';
 
 interface SearchResults {
   items: StarterPack[] | EnhancedUser[];
@@ -18,6 +17,8 @@ interface SearchResults {
   totalPages: number;
   itemsPerPage: number;
 }
+
+const DEBOUNCE_DELAY = 300; // ms
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,67 +32,110 @@ export default function Home() {
   const [sortBy, setSortBy] = useState('');
   const [sortOrder, setSortOrder] = useState('asc');
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserDetails, setSelectedUserDetails] = useState<EnhancedUser | null>(null);
+  const [userLoading, setUserLoading] = useState(false);
+  const [userError, setUserError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const debounceTimeout = setTimeout(() => {
-      if (searchQuery.trim()) {
-        handleSearch(1);
-      }
-    }, 300);
   
-    return () => clearTimeout(debounceTimeout);
-  }, [searchQuery, view, sortBy, sortOrder]);
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
 
-  const fetchStats = async () => {
+  // handle user fetching
+  type UserClickHandler = (userId: string) => Promise<void>;
+  // Define the handler
+  const handleUserClick: UserClickHandler = async (userId) => {
+    setSelectedUserId(userId);
+    setUserLoading(true);
+    setUserError(null);
     try {
-      const response = await fetch('/api/stats');
-      if (!response.ok) throw new Error('Failed to fetch stats');
+      const response = await fetch(`/api/user/${userId}`);
+      if (!response.ok) throw new Error('Failed to fetch user details');
       const data = await response.json();
-      setStats(data);
+      setSelectedUserDetails(data);
     } catch (error) {
-      console.error('Error fetching stats:', error);
-      setError('Failed to load statistics');
+      console.error('Error fetching user:', error);
+      setUserError('Failed to load user details');
+    } finally {
+      setUserLoading(false);
     }
   };
 
   const handleSearch = useCallback(async (page = 1) => {
+    // Don't search if query is empty
     if (!searchQuery.trim()) {
       setSearchResults(null);
       return;
     }
-  
+
     setLoading(true);
     setError(null);
     try {
       const searchParams = new URLSearchParams({
-        q: searchQuery,
+        q: searchQuery.trim(),
         type: view,
         page: String(page),
-        sortBy: sortBy,
-        sortOrder: sortOrder
+        sortBy,
+        sortOrder
       });
-  
+
       const response = await fetch(`/api/search?${searchParams}`);
-      if (!response.ok) throw new Error('Search failed');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Search failed');
+      }
       const data = await response.json();
       setSearchResults(data);
       setCurrentPage(page);
     } catch (error) {
       console.error('Error searching:', error);
-      setError('Search failed. Please try again.');
+      setError(error instanceof Error ? error.message : 'Search failed');
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, view, sortBy, sortOrder]); // Include all dependencies
+  }, [searchQuery, view, sortBy, sortOrder]);
 
+  const debouncedSearch = useCallback((page: number = 1) => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      handleSearch(page);
+    }, DEBOUNCE_DELAY);
+  }, [handleSearch]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Initial stats fetch
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/stats');
+        if (!response.ok) throw new Error('Failed to fetch stats');
+        const data = await response.json();
+        setStats(data);
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+        setError('Failed to load statistics');
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  // Handle search parameter changes
   useEffect(() => {
     if (searchQuery.trim()) {
-      handleSearch(1);
+      debouncedSearch(1);
     }
-  }, [handleSearch, searchQuery]);
+  }, [searchQuery, view, sortBy, sortOrder, debouncedSearch]);
 
   const handleViewChange = (newView: 'packs' | 'users') => {
     setView(newView);
@@ -103,10 +147,22 @@ export default function Home() {
     }
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  };
+
+  const handleManualSearch = () => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    handleSearch(1);
+  };
+
   const handlePackClick = (packId: string) => {
     setSelectedPackId(packId);
   };
 
+  // Render functions remain the same
   const renderStats = () => {
     if (!stats) return null;
 
@@ -166,14 +222,15 @@ export default function Home() {
           type="text"
           placeholder={`Search ${view === 'packs' ? 'starter packs' : 'users'}...`}
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          onChange={handleInputChange}
+          onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()}
           className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
-          onClick={() => handleSearch(1)} // Always search from page 1 when manually clicking search
+          onClick={handleManualSearch}
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 flex items-center gap-2 transition-colors"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
+                   disabled:bg-blue-300 flex items-center gap-2 transition-colors"
         >
           <Search className="h-5 w-5" />
           Search
@@ -293,7 +350,41 @@ export default function Home() {
             <PackDetails
               packId={selectedPackId}
               onClose={() => setSelectedPackId(null)}
+              onUserClick={handleUserClick}
             />
+          </div>
+        </div>
+      )}
+
+      {selectedUserId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4">
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setSelectedUserId(null);
+                  setSelectedUserDetails(null);
+                }}
+                className="text-gray-500 hover:text-gray-700 p-2 rounded-md hover:bg-gray-100 transition-colors"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            {userLoading ? (
+              <div className="text-center py-8">Loading user details...</div>
+            ) : userError ? (
+              <div className="text-red-600 text-center py-8">{userError}</div>
+            ) : selectedUserDetails ? (
+              <UserCard 
+                user={selectedUserDetails}
+                onPackClick={(packId) => {
+                  setSelectedUserId(null);
+                  setSelectedUserDetails(null);
+                  setSelectedPackId(packId);
+                }}
+              />
+            ) : null}
           </div>
         </div>
       )}
