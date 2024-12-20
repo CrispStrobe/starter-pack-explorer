@@ -1,18 +1,19 @@
-// src/components/UserCard.tsx
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Users, ExternalLink, Package } from 'lucide-react';
 import type { PackBasic } from '@/types';
 
+interface UserData {
+  did: string;
+  handle: string;
+  display_name?: string;
+  followers_count?: number;
+  follows_count?: number;
+  member_packs?: PackBasic[];  // minimal info from user route
+  created_packs?: PackBasic[]; // minimal info from user route
+}
+
 interface UserCardProps {
-  user: {
-    did: string;
-    handle: string;
-    display_name?: string;
-    followers_count?: number;
-    follows_count?: number;
-    member_packs?: PackBasic[];
-    created_packs?: PackBasic[];
-  };
+  user: UserData;
   onPackClick: (packId: string) => void;
 }
 
@@ -51,7 +52,7 @@ export function UserCard({ user, onPackClick }: UserCardProps) {
             </p>
           )}
 
-          {/* Created Packs - show first */}
+          {/* Created Packs */}
           {user.created_packs && user.created_packs.length > 0 && (
             <div>
               <h4 className="font-semibold mb-2 flex items-center gap-2 text-green-700">

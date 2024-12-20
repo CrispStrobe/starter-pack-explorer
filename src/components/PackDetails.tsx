@@ -1,4 +1,3 @@
-// src/components/PackDetails.tsx
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ExternalLink, Users, Package, CalendarDays, TrendingUp, X } from 'lucide-react';
@@ -7,7 +6,7 @@ import type { StarterPack } from '@/types';
 interface PackDetailsProps {
   packId: string;
   onClose?: () => void;
-  onUserClick?: (userId: string) => void;  // Add this prop definition
+  onUserClick?: (userId: string) => void;
 }
 
 export function PackDetails({ packId, onClose, onUserClick }: PackDetailsProps) {
@@ -198,7 +197,6 @@ export function PackDetails({ packId, onClose, onUserClick }: PackDetailsProps) 
             </h4>
             <div className="grid gap-2">
               {pack.members && pack.members.length > 0 && (
-              
                 <div className="grid gap-2">
                   {pack.members.map((member) => (
                     <div
@@ -206,7 +204,7 @@ export function PackDetails({ packId, onClose, onUserClick }: PackDetailsProps) 
                       className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
                     >
                       <button
-                        onClick={() => onUserClick && onUserClick(member.did)}  // Use the prop here
+                        onClick={() => onUserClick && onUserClick(member.did)}
                         className="flex-1 text-left hover:text-blue-600 transition-colors"
                       >
                         <span className="font-medium">
@@ -234,7 +232,6 @@ export function PackDetails({ packId, onClose, onUserClick }: PackDetailsProps) 
                     </div>
                   ))}
                 </div>
-              
               )}
             </div>
           </div>

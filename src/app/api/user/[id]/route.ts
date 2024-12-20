@@ -1,9 +1,5 @@
-// src/app/api/user/[id]/route.ts
 import { NextRequest } from 'next/server';
 import clientPromise from '@/lib/db';
-import { Db } from 'mongodb';
-
-export const dynamic = 'force-dynamic';
 
 interface RouteContext {
   params: {
@@ -11,23 +7,14 @@ interface RouteContext {
   };
 }
 
-// Define the shape of the starter pack documents
 interface StarterPack {
   rkey: string;
   name?: string;
   creator?: string;
   creator_did?: string;
-  description?: string;
   user_count?: number;
-  users?: string[];
-  weekly_joins?: number;
-  total_joins?: number;
-  created_at?: Date;
-  deleted?: boolean;
-  status?: string;
 }
 
-// Define the shape of the user document
 interface User {
   did: string;
   handle?: string;
@@ -38,33 +25,6 @@ interface User {
   created_packs?: string[];
   deleted?: boolean;
 }
-
-// Get complete pack details
-const getFullPackDetails = async (
-  db: Db,
-  pack: StarterPack
-): Promise<StarterPack | null> => {
-  const fullPack = await db.collection<StarterPack>('starter_packs').findOne(
-    { rkey: pack.rkey },
-    {
-      projection: {
-        rkey: 1,
-        name: 1,
-        creator: 1,
-        creator_did: 1,
-        description: 1,
-        user_count: 1,
-        users: 1,
-        weekly_joins: 1,
-        total_joins: 1,
-        created_at: 1,
-        deleted: 1,
-        status: 1
-      }
-    }
-  );
-  return fullPack;
-};
 
 export async function GET(
   request: NextRequest,
@@ -98,30 +58,38 @@ export async function GET(
       );
     }
 
-    // Get member packs with full details
-    let memberPacks: StarterPack[] = [];
-    if (user.pack_ids && user.pack_ids.length) {
-      const packs = await db.collection<StarterPack>('starter_packs')
-        .find({
-          rkey: { $in: user.pack_ids },
-          deleted: { $ne: true }
-        })
-        .toArray();
-      memberPacks = await Promise.all(packs.map(pack => getFullPackDetails(db, pack)))
-        .then(results => results.filter((p): p is StarterPack => p !== null));
-    }
+    // Get member packs with minimal details
+    const memberPacks = user.pack_ids?.length
+      ? await db.collection<StarterPack>('starter_packs')
+          .find({
+            rkey: { $in: user.pack_ids },
+            deleted: { $ne: true }
+          })
+          .project({
+            rkey: 1,
+            name: 1,
+            creator: 1,
+            creator_did: 1,
+            user_count: 1
+          })
+          .toArray()
+      : [];
 
-    // Get created packs with full details
-    const createdPacksArray = await db.collection<StarterPack>('starter_packs')
+    // Get created packs with minimal details
+    const createdPacks = await db.collection<StarterPack>('starter_packs')
       .find({
         creator_did: userId,
         deleted: { $ne: true }
       })
+      .project({
+        rkey: 1,
+        name: 1,
+        creator: 1,
+        creator_did: 1,
+        user_count: 1
+      })
       .toArray();
-    const createdPacks = await Promise.all(createdPacksArray.map(pack => getFullPackDetails(db, pack)))
-      .then(results => results.filter((p): p is StarterPack => p !== null));
 
-    // Transform to match EnhancedUser interface if needed
     const response = {
       did: user.did,
       handle: user.handle,
