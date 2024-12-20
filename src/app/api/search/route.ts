@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/db';
 import type { Sort } from 'mongodb';
-import type {  
+import type { 
   StarterPack, 
   User, 
   EnhancedUser, 
@@ -10,6 +10,9 @@ import type {
 } from '@/types';
 
 const ITEMS_PER_PAGE = 10;
+
+// explicitly mark the route as dynamic
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {

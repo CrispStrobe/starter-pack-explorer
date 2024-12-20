@@ -36,10 +36,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (searchQuery.trim()) {
-      handleSearch(1);
-    }
-  }, [sortBy, sortOrder]);
+    const debounceTimeout = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(1);
+      }
+    }, 300);
+  
+    return () => clearTimeout(debounceTimeout);
+  }, [searchQuery, view, sortBy, sortOrder]);
 
   const fetchStats = async () => {
     try {
@@ -54,14 +58,23 @@ export default function Home() {
   };
 
   const handleSearch = useCallback(async (page = 1) => {
-    if (!searchQuery.trim()) return;
-
+    if (!searchQuery.trim()) {
+      setSearchResults(null);
+      return;
+    }
+  
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(
-        `/api/search?q=${encodeURIComponent(searchQuery)}&type=${view}&page=${page}&sortBy=${sortBy}&sortOrder=${sortOrder}`
-      );
+      const searchParams = new URLSearchParams({
+        q: searchQuery,
+        type: view,
+        page: String(page),
+        sortBy: sortBy,
+        sortOrder: sortOrder
+      });
+  
+      const response = await fetch(`/api/search?${searchParams}`);
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
       setSearchResults(data);
@@ -72,7 +85,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, view, sortBy, sortOrder]);
+  }, [searchQuery, view, sortBy, sortOrder]); // Include all dependencies
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -158,7 +171,7 @@ export default function Home() {
           className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
-          onClick={() => handleSearch()}
+          onClick={() => handleSearch(1)} // Always search from page 1 when manually clicking search
           disabled={loading}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 flex items-center gap-2 transition-colors"
         >
