@@ -1,9 +1,9 @@
 // src/app/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, Users, Package } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PackCard } from '@/components/PackCard';
 import { UserCard } from '@/components/UserCard';
 import { PackDetails } from '@/components/PackDetails';
@@ -53,21 +53,15 @@ export default function Home() {
     }
   };
 
-  const handleSearch = async (page = 1) => {
+  const handleSearch = useCallback(async (page = 1) => {
     if (!searchQuery.trim()) return;
 
     setLoading(true);
     setError(null);
     try {
-      const searchParams = new URLSearchParams({
-        q: searchQuery,
-        type: view,
-        page: page.toString(),
-        sortBy,
-        sortOrder
-      });
-      
-      const response = await fetch(`/api/search?${searchParams}`);
+      const response = await fetch(
+        `/api/search?q=${encodeURIComponent(searchQuery)}&type=${view}&page=${page}&sortBy=${sortBy}&sortOrder=${sortOrder}`
+      );
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
       setSearchResults(data);
@@ -78,7 +72,13 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, view, sortBy, sortOrder]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      handleSearch(1);
+    }
+  }, [handleSearch, searchQuery]);
 
   const handleViewChange = (newView: 'packs' | 'users') => {
     setView(newView);
@@ -219,7 +219,7 @@ export default function Home() {
       if (searchQuery) {
         return (
           <div className="text-center py-8 text-gray-600">
-            No results found for "{searchQuery}"
+            No results found for &quot;{searchQuery}&quot;
           </div>
         );
       }

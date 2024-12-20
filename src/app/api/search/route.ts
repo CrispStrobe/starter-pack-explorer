@@ -2,13 +2,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/db';
 import type { Sort } from 'mongodb';
-import type { User, PackBasic } from '@/types';
+import type {  
+  StarterPack, 
+  User, 
+  EnhancedUser, 
+  ApiResponse 
+} from '@/types';
 
 const ITEMS_PER_PAGE = 10;
 
 export async function GET(request: NextRequest) {
   try {
-    // Parse and validate query parameters
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q');
     const type = searchParams.get('type') || 'packs';
@@ -30,7 +34,6 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * ITEMS_PER_PAGE;
 
     if (type === 'packs') {
-      // Search packs - include deleted ones but mark them
       const baseQuery = {
         $or: [
           { name: { $regex: searchRegex } },
@@ -44,21 +47,26 @@ export async function GET(request: NextRequest) {
       const sortSpec = { [getPackSortField(sortBy)]: sortOrder } as Sort;
 
       const matchingPacks = await db.collection('starter_packs')
-        .find(baseQuery)
+        .find<Partial<StarterPack>>(baseQuery)
         .project({
           rkey: 1,
           name: 1,
           creator: 1,
           creator_did: 1,
-          description: 1,
           user_count: 1,
+          description: 1,
           users: 1,
           weekly_joins: 1,
           total_joins: 1,
           created_at: 1,
+          updated_at: 1,
           deleted: 1,
+          deleted_at: 1,
+          deletion_reason: 1,
           status: 1,
-          last_known_state: 1
+          status_updated_at: 1,
+          status_reason: 1,
+          last_updated: 1
         })
         .sort(sortSpec)
         .skip(skip)
@@ -66,10 +74,9 @@ export async function GET(request: NextRequest) {
         .toArray();
 
       const packsWithDetails = await Promise.all(
-        matchingPacks.map(async (pack) => {
-          // Get creator details
+        matchingPacks.map(async (pack): Promise<StarterPack> => {
           const creator = await db.collection('users')
-            .findOne(
+            .findOne<User>(
               { did: pack.creator_did },
               {
                 projection: {
@@ -82,30 +89,44 @@ export async function GET(request: NextRequest) {
               }
             );
 
-          // If pack is deleted, use last known state
-          const packData = pack.deleted ? {
-            ...pack,
-            name: pack.last_known_state?.name || pack.name,
-            creator: pack.last_known_state?.creator || pack.creator
-          } : pack;
-
-          return {
-            ...packData,
-            creator_details: creator
+          // Ensure all required properties are present
+          const completePack: StarterPack = {
+            rkey: pack.rkey!,
+            name: pack.name!,
+            creator: pack.creator!,
+            creator_did: pack.creator_did!,
+            user_count: pack.user_count!,
+            description: pack.description,
+            users: pack.users || [],
+            created_at: pack.created_at || new Date().toISOString(),
+            updated_at: pack.updated_at || new Date().toISOString(),
+            weekly_joins: pack.weekly_joins || 0,
+            total_joins: pack.total_joins || 0,
+            deleted: pack.deleted,
+            deleted_at: pack.deleted_at,
+            deletion_reason: pack.deletion_reason,
+            status: pack.status,
+            status_updated_at: pack.status_updated_at,
+            status_reason: pack.status_reason,
+            last_updated: pack.last_updated || new Date().toISOString(),
+            creator_details: creator || undefined
           };
+
+          return completePack;
         })
       );
 
-      return NextResponse.json({
+      const response: ApiResponse<StarterPack> = {
         items: packsWithDetails,
         total: totalPacks,
         page,
         totalPages: Math.ceil(totalPacks / ITEMS_PER_PAGE),
         itemsPerPage: ITEMS_PER_PAGE
-      });
+      };
+
+      return NextResponse.json(response);
 
     } else {
-      // Search users
       const baseQuery = {
         $or: [
           { handle: { $regex: searchRegex } },
@@ -119,7 +140,7 @@ export async function GET(request: NextRequest) {
       const sortSpec = { [getUserSortField(sortBy)]: sortOrder } as Sort;
 
       const users = await db.collection('users')
-        .find(baseQuery)
+        .find<User>(baseQuery)
         .project({
           did: 1,
           handle: 1,
@@ -136,11 +157,10 @@ export async function GET(request: NextRequest) {
         .toArray();
 
       const enhancedUsers = await Promise.all(
-        users.map(async (user) => {
-          // Get all packs where user is a member
+        users.map(async (user): Promise<EnhancedUser> => {
           const memberPacks = user.pack_ids?.length ?
             await db.collection('starter_packs')
-              .find({ rkey: { $in: user.pack_ids } })
+              .find<StarterPack>({ rkey: { $in: user.pack_ids } })
               .project({
                 rkey: 1,
                 name: 1,
@@ -148,14 +168,12 @@ export async function GET(request: NextRequest) {
                 creator_did: 1,
                 user_count: 1,
                 deleted: 1,
-                status: 1,
-                last_known_state: 1
+                status: 1
               })
               .toArray() : [];
 
-          // Get all packs created by user
           const createdPacks = await db.collection('starter_packs')
-            .find({ creator_did: user.did })
+            .find<StarterPack>({ creator_did: user.did })
             .project({
               rkey: 1,
               name: 1,
@@ -163,22 +181,9 @@ export async function GET(request: NextRequest) {
               creator_did: 1,
               user_count: 1,
               deleted: 1,
-              status: 1,
-              last_known_state: 1
+              status: 1
             })
             .toArray();
-
-          // Transform pack data to include deleted state
-          const transformPacks = (packs: any[]): PackBasic[] => 
-            packs.map(pack => ({
-              rkey: pack.rkey,
-              name: pack.deleted ? pack.last_known_state?.name || pack.name : pack.name,
-              creator: pack.deleted ? pack.last_known_state?.creator || pack.creator : pack.creator,
-              creator_did: pack.creator_did,
-              user_count: pack.user_count,
-              deleted: pack.deleted,
-              status: pack.status
-            }));
 
           return {
             did: user.did,
@@ -186,20 +191,33 @@ export async function GET(request: NextRequest) {
             display_name: user.display_name,
             followers_count: user.followers_count,
             follows_count: user.follows_count,
-            member_packs: transformPacks(memberPacks),
-            created_packs: transformPacks(createdPacks),
-            deleted: user.deleted
+            member_packs: memberPacks.map(pack => ({
+              rkey: pack.rkey,
+              name: pack.name,
+              creator: pack.creator,
+              creator_did: pack.creator_did,
+              user_count: pack.user_count
+            })),
+            created_packs: createdPacks.map(pack => ({
+              rkey: pack.rkey,
+              name: pack.name,
+              creator: pack.creator,
+              creator_did: pack.creator_did,
+              user_count: pack.user_count
+            }))
           };
         })
       );
 
-      return NextResponse.json({
+      const response: ApiResponse<EnhancedUser> = {
         items: enhancedUsers,
         total: totalUsers,
         page,
         totalPages: Math.ceil(totalUsers / ITEMS_PER_PAGE),
         itemsPerPage: ITEMS_PER_PAGE
-      });
+      };
+
+      return NextResponse.json(response);
     }
   } catch (error) {
     console.error('Database Error:', error);

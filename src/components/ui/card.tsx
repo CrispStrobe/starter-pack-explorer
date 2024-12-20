@@ -1,13 +1,13 @@
 // src/components/ui/card.tsx
-import { forwardRef, HTMLAttributes } from "react"
-import { cn } from "@/lib/utils"
+import { forwardRef, HTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
 
-interface CardProps extends HTMLAttributes<HTMLDivElement> {}
-interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {}
-interface CardFooterProps extends HTMLAttributes<HTMLDivElement> {}
-interface CardTitleProps extends HTMLAttributes<HTMLHeadingElement> {}
-interface CardDescriptionProps extends HTMLAttributes<HTMLParagraphElement> {}
-interface CardContentProps extends HTMLAttributes<HTMLDivElement> {}
+type CardProps = HTMLAttributes<HTMLDivElement>;
+type CardHeaderProps = HTMLAttributes<HTMLDivElement>;
+type CardFooterProps = HTMLAttributes<HTMLDivElement>;
+type CardTitleProps = HTMLAttributes<HTMLHeadingElement>;
+type CardDescriptionProps = HTMLAttributes<HTMLParagraphElement>;
+type CardContentProps = HTMLAttributes<HTMLDivElement>;
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, ...props }, ref) => (
@@ -20,8 +20,8 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       {...props}
     />
   )
-)
-Card.displayName = "Card"
+);
+Card.displayName = "Card";
 
 export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
   ({ className, ...props }, ref) => (
@@ -31,8 +31,8 @@ export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
       {...props}
     />
   )
-)
-CardHeader.displayName = "CardHeader"
+);
+CardHeader.displayName = "CardHeader";
 
 export const CardTitle = forwardRef<HTMLHeadingElement, CardTitleProps>(
   ({ className, ...props }, ref) => (
@@ -45,8 +45,8 @@ export const CardTitle = forwardRef<HTMLHeadingElement, CardTitleProps>(
       {...props}
     />
   )
-)
-CardTitle.displayName = "CardTitle"
+);
+CardTitle.displayName = "CardTitle";
 
 export const CardDescription = forwardRef<HTMLParagraphElement, CardDescriptionProps>(
   ({ className, ...props }, ref) => (
@@ -56,19 +56,15 @@ export const CardDescription = forwardRef<HTMLParagraphElement, CardDescriptionP
       {...props}
     />
   )
-)
-CardDescription.displayName = "CardDescription"
+);
+CardDescription.displayName = "CardDescription";
 
 export const CardContent = forwardRef<HTMLDivElement, CardContentProps>(
   ({ className, ...props }, ref) => (
-    <div 
-      ref={ref} 
-      className={cn("p-6 pt-0", className)} 
-      {...props}
-    />
+    <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
   )
-)
-CardContent.displayName = "CardContent"
+);
+CardContent.displayName = "CardContent";
 
 export const CardFooter = forwardRef<HTMLDivElement, CardFooterProps>(
   ({ className, ...props }, ref) => (
@@ -78,5 +74,5 @@ export const CardFooter = forwardRef<HTMLDivElement, CardFooterProps>(
       {...props}
     />
   )
-)
-CardFooter.displayName = "CardFooter"
+);
+CardFooter.displayName = "CardFooter";
