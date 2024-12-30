@@ -1,9 +1,7 @@
-// src/app/api/search/route.ts
 import { NextRequest } from 'next/server';
 import { WithId, Document } from 'mongodb';
 import clientPromise from '@/lib/db';
 
-// dynamic rendering (avoid only statical render)
 export const dynamic = 'force-dynamic';
 
 interface PackDocument extends WithId<Document> {
@@ -11,21 +9,12 @@ interface PackDocument extends WithId<Document> {
   name: string;
   creator: string;
   creator_did: string;
+  description?: string;
   user_count: number;
-  deleted?: boolean;
-  status?: string;
-  last_known_state?: {
-    name?: string;
-    creator?: string;
-  };
-}
-
-interface PackMapItem {
-  rkey: string;
-  name: string;
-  creator: string;
-  creator_did: string;
-  user_count: number;
+  users: string[];
+  weekly_joins: number;
+  total_joins: number;
+  created_at: string;
   deleted?: boolean;
   status?: string;
   last_known_state?: {
@@ -35,9 +24,8 @@ interface PackMapItem {
 }
 
 const ITEMS_PER_PAGE = 10;
-const QUERY_TIMEOUT = 8000; // 8 seconds timeout
+const QUERY_TIMEOUT = 12000;
 
-// Helper function to run query with timeout
 async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   const timeoutPromise = new Promise<never>((_, reject) => {
     const timeout = setTimeout(() => {
@@ -56,8 +44,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') || 'packs';
     const page = parseInt(searchParams.get('page') || '1', 10);
     const sortBy = searchParams.get('sortBy') || '';
-    const sortOrderParam = searchParams.get('sortOrder') || 'asc';
-    const sortOrder = sortOrderParam === 'desc' ? -1 : 1;
+    const sortOrder = searchParams.get('sortOrder') === 'desc' ? -1 : 1;
 
     if (!query || query.length < 2) {
       return Response.json(
@@ -72,7 +59,6 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * ITEMS_PER_PAGE;
 
     if (type === 'packs') {
-      // Use $or with explicit index hints if needed
       const pipeline = [
         {
           $match: {
@@ -80,6 +66,11 @@ export async function GET(request: NextRequest) {
               { name: { $regex: searchRegex } },
               { creator: { $regex: searchRegex } }
             ]
+          }
+        },
+        {
+          $match: {
+            deleted: { $ne: true }
           }
         },
         {
@@ -110,32 +101,33 @@ export async function GET(request: NextRequest) {
         }
       ];
 
-      // Run count and search in parallel with timeout
       const [totalPacks, matchingPacks] = await Promise.all([
         runWithTimeout(
           db.collection('starter_packs').countDocuments({
             $or: [
               { name: { $regex: searchRegex } },
               { creator: { $regex: searchRegex } }
-            ]
+            ],
+            deleted: { $ne: true }
           }),
           QUERY_TIMEOUT
         ),
         runWithTimeout(
           db.collection('starter_packs')
-            .aggregate(pipeline)
+            .aggregate<PackDocument>(pipeline)
             .toArray(),
           QUERY_TIMEOUT
         )
       ]);
 
-      // Efficiently get creator details using existing indexes
-      const creatorDids = Array.from(new Set(matchingPacks.map(p => p.creator_did)));
+      const creatorDids = matchingPacks
+        .map(p => p.creator_did)
+        .filter((did): did is string => Boolean(did));
 
-      const creators = creatorDids.length > 0 ? await runWithTimeout(
+      const creators = creatorDids.length ? await runWithTimeout(
         db.collection('users')
           .find(
-            { did: { $in: creatorDids } },
+            { did: { $in: creatorDids }, deleted: { $ne: true } },
             {
               projection: {
                 did: 1,
@@ -150,19 +142,13 @@ export async function GET(request: NextRequest) {
       ) : [];
 
       const creatorsMap = new Map(creators.map(c => [c.did, c]));
-
-      const packsWithDetails = matchingPacks.map(pack => {
-        const packData = pack.deleted ? {
-          ...pack,
-          name: pack.last_known_state?.name || pack.name,
-          creator: pack.last_known_state?.creator || pack.creator
-        } : pack;
-
-        return {
-          ...packData,
-          creator_details: creatorsMap.get(pack.creator_did) || null
-        };
-      });
+      
+      const packsWithDetails = matchingPacks.map(pack => ({
+        ...pack,
+        name: pack.deleted ? pack.last_known_state?.name || pack.name : pack.name,
+        creator: pack.deleted ? pack.last_known_state?.creator || pack.creator : pack.creator,
+        creator_details: creatorsMap.get(pack.creator_did) || null
+      }));
 
       return Response.json({
         items: packsWithDetails,
@@ -173,13 +159,21 @@ export async function GET(request: NextRequest) {
       });
 
     } else {
-      // User search with existing indexes
       const pipeline = [
         {
           $match: {
             $or: [
               { handle: { $regex: searchRegex } },
               { display_name: { $regex: searchRegex } }
+            ]
+          }
+        },
+        // Only filter "really deleted" users
+        {
+          $match: {
+            $or: [
+              { deleted: { $ne: true } },
+              { deletion_reason: "no_remaining_packs" }  // These might be active
             ]
           }
         },
@@ -201,7 +195,8 @@ export async function GET(request: NextRequest) {
             follows_count: 1,
             pack_ids: 1,
             created_packs: 1,
-            deleted: 1
+            deleted: 1,
+            deletion_reason: 1  // Include this to help with debugging
           }
         }
       ];
@@ -212,7 +207,8 @@ export async function GET(request: NextRequest) {
             $or: [
               { handle: { $regex: searchRegex } },
               { display_name: { $regex: searchRegex } }
-            ]
+            ],
+            deleted: { $ne: true }
           }),
           QUERY_TIMEOUT
         ),
@@ -224,18 +220,20 @@ export async function GET(request: NextRequest) {
         )
       ]);
 
-      // Efficiently get pack details using rkey index
-      const allPackIds = Array.from(new Set(
-        [].concat(
-          ...(users.flatMap(u => u.pack_ids || [])),
-          ...(users.flatMap(u => u.created_packs || []))
-        )
-      ));
-      
-      const packs = allPackIds.length ? await runWithTimeout(
-        db.collection<PackDocument>('starter_packs')
+      const packIds = users.reduce<string[]>((acc, user) => {
+        const userPacks = [
+          ...(user.pack_ids || []),
+          ...(user.created_packs || [])
+        ].filter((id): id is string => Boolean(id));
+        return [...acc, ...userPacks];
+      }, []);
+
+      const uniquePackIds = Array.from(new Set(packIds));
+
+      const packs = uniquePackIds.length ? await runWithTimeout(
+        db.collection('starter_packs')
           .find(
-            { rkey: { $in: allPackIds } },
+            { rkey: { $in: uniquePackIds }, deleted: { $ne: true } },
             {
               projection: {
                 rkey: 1,
@@ -252,55 +250,42 @@ export async function GET(request: NextRequest) {
           .toArray(),
         QUERY_TIMEOUT
       ) : [];
-      
-      const packsMap = new Map<string, PackMapItem>(
-        packs.map((p: PackDocument): [string, PackMapItem] => [
-          p.rkey,
-          {
-            rkey: p.rkey,
-            name: p.name,
-            creator: p.creator,
-            creator_did: p.creator_did,
-            user_count: p.user_count,
-            deleted: p.deleted,
-            status: p.status,
-            last_known_state: p.last_known_state
-          }
-        ])
+
+      const packsMap = new Map(
+        packs.map(p => [p.rkey, p])
       );
-      
-      const transformPack = (pack: PackMapItem) => ({
-        rkey: pack.rkey,
-        name: pack.deleted ? pack.last_known_state?.name || pack.name : pack.name,
-        creator: pack.deleted ? pack.last_known_state?.creator || pack.creator : pack.creator,
-        creator_did: pack.creator_did,
-        user_count: pack.user_count,
-        deleted: pack.deleted,
-        status: pack.status
-      });
-      
-      const enhancedUsers = users.map(user => {
-        const memberPacks = (user.pack_ids || [])
+
+      const enhancedUsers = users.map(user => ({
+        did: user.did,
+        handle: user.handle,
+        display_name: user.display_name,
+        followers_count: user.followers_count,
+        follows_count: user.follows_count,
+        member_packs: (user.pack_ids || [])
           .map((id: string) => packsMap.get(id))
-          .filter((pack: PackMapItem | undefined): pack is PackMapItem => pack !== undefined)
-          .map(transformPack);
-      
-        const createdPacks = (user.created_packs || [])
+          .filter((pack: PackDocument | undefined): pack is PackDocument => Boolean(pack))
+          .map((pack: PackDocument) => ({
+            rkey: pack.rkey,
+            name: pack.deleted ? pack.last_known_state?.name || pack.name : pack.name,
+            creator: pack.deleted ? pack.last_known_state?.creator || pack.creator : pack.creator,
+            creator_did: pack.creator_did,
+            user_count: pack.user_count,
+            deleted: pack.deleted,
+            status: pack.status
+          })),
+        created_packs: (user.created_packs || [])
           .map((id: string) => packsMap.get(id))
-          .filter((pack: PackMapItem | undefined): pack is PackMapItem => pack !== undefined)
-          .map(transformPack);
-      
-        return {
-          did: user.did,
-          handle: user.handle,
-          display_name: user.display_name,
-          followers_count: user.followers_count,
-          follows_count: user.follows_count,
-          member_packs: memberPacks,
-          created_packs: createdPacks,
-          deleted: user.deleted
-        };
-      });
+          .filter((pack: PackDocument | undefined): pack is PackDocument => Boolean(pack))
+          .map((pack: PackDocument) => ({
+            rkey: pack.rkey,
+            name: pack.deleted ? pack.last_known_state?.name || pack.name : pack.name,
+            creator: pack.deleted ? pack.last_known_state?.creator || pack.creator : pack.creator,
+            creator_did: pack.creator_did,
+            user_count: pack.user_count,
+            deleted: pack.deleted,
+            status: pack.status
+          }))
+      }));
 
       return Response.json({
         items: enhancedUsers,
@@ -312,11 +297,10 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error('Search Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return Response.json(
       { 
-        error: 'Search failed', 
-        details: errorMessage
+        error: 'Search failed',
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );
